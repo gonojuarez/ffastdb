@@ -23,6 +23,7 @@ A high-performance, pure-Dart NoSQL database for Flutter & server-side Dart.
 | Transactions | ✅ | ❌ | ✅ |
 | `DateTime` support | ✅ | ✅ | ✅ |
 | Web support | ✅ | ✅ | ❌ |
+| WASM support | ✅ | ❌ | ❌ |
 
 ---
 
@@ -30,42 +31,41 @@ A high-performance, pure-Dart NoSQL database for Flutter & server-side Dart.
 
 ```yaml
 dependencies:
-  ffastdb: ^0.0.2
+  ffastdb: ^0.0.13
 ```
 
 ### Open a database
 
-#### Flutter — mobile, desktop, and web (recommended)
+#### Flutter — mobile, desktop, web, and WASM (recommended)
 
 ```dart
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:ffastdb/ffastdb.dart';
-import 'package:path_provider/path_provider.dart'; // mobile/desktop only
+import 'package:path_provider/path_provider.dart'; // add to your app's pubspec
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // openDatabase() picks the right storage engine for the current platform:
-  //   • Mobile / Desktop → IoStorageStrategy + WAL (data persisted to disk)
-  //   • Web → WebStorageStrategy (in-memory; data lives for the browser session)
-  // The directory argument is ignored on web, so this code works everywhere.
-  final dir = await getApplicationDocumentsDirectory();
-  final db = await openDatabase(
-    'myapp',
-    directory: dir.path,
-    version: 1,
-  );
+  // On web/WASM the directory is ignored — openDatabase() uses localStorage.
+  // On native, path_provider gives a suitable persistent directory.
+  String dir = '';
+  if (!kIsWeb) {
+    final appDir = await getApplicationDocumentsDirectory();
+    dir = appDir.path;
+  }
 
+  final db = await openDatabase('myapp', directory: dir, version: 1);
   runApp(MyApp(db: db));
 }
 ```
 
-> **Web:** `path_provider` is unavailable on Flutter web and will throw a
-> `MissingPluginException` if called. `openDatabase()` sidesteps this entirely —
-> it never calls `path_provider` and ignores `directory` on web. You do **not**
-> need a `kIsWeb` guard.
+> **Web / WASM:** `directory` is automatically ignored — the library selects
+> `LocalStorageStrategy` at compile time via `dart.library.js_interop`. Data
+> persists in the browser's `localStorage` and survives page reloads.
 
-> **Web persistence:** the in-memory `WebStorageStrategy` does not survive a
-> tab reload. Full IndexedDB persistence is planned for a future release.
+> **Note:** `path_provider` is **not** a dependency of `ffastdb` itself — add
+> it only to your app's own `pubspec.yaml` for native targets.
 
 #### Server-side Dart / manual setup
 
@@ -395,9 +395,10 @@ FastDB
 ├── BufferedStorageStrategy
 │   └── Write coalescing (~9x faster bulk inserts)
 └── StorageStrategy (platform-specific)
-    ├── IoStorageStrategy     (Mobile/Desktop + file lock)
-    ├── MemoryStorageStrategy (Tests / in-memory)
-    └── WebStorageStrategy    (IndexedDB)
+    ├── IoStorageStrategy      (Mobile / Desktop / Server — file lock + WAL)
+    ├── MemoryStorageStrategy  (Tests / in-memory, zero persistence)
+    ├── WebStorageStrategy     (In-memory base, no dart:io, safe for web)
+    └── LocalStorageStrategy   (Web JS / WASM — persists in browser localStorage)
 ```
 
 ---

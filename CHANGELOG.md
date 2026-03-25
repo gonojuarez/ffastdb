@@ -1,3 +1,7 @@
+## 0.0.13
+- solve wasm issues
+## 0.0.12
+- Fig minors issues
 ## 0.0.11 (unreleased)
 
 ### Critical Bug fixes

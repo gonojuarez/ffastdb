@@ -8,10 +8,10 @@ import 'package:path_provider/path_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final String dir;
-  if (kIsWeb) {
-    dir = '';
-  } else {
+  // On web/WASM the directory is ignored — openDatabase() uses localStorage.
+  // On native, path_provider gives a suitable persistent directory.
+  String dir = '';
+  if (!kIsWeb) {
     final appDir = await getApplicationDocumentsDirectory();
     dir = appDir.path;
   }

@@ -703,11 +703,11 @@ void main() {
       await db.insert({'name': 'Bob', 'city': 'London'});
       await db.close(); // writes clean flag = 0x43
 
-      // Corrupt the clean flag to simulate a crash (no clean close)
-      final raf = await File(path).open(mode: FileMode.write);
-      await raf.setPosition(24);
-      await raf.writeByte(0x00);
-      await raf.close();
+      // Corrupt the clean flag to simulate a crash (no clean close).
+      // Read-modify-write avoids FileMode.write which truncates the file on Windows.
+      final bytes = await File(path).readAsBytes();
+      bytes[24] = 0x00;
+      await File(path).writeAsBytes(bytes);
 
       // Reopen WITH index registration — dirty flag triggers index rebuild
       final db2 = FastDB(IoStorageStrategy(path));
@@ -735,11 +735,11 @@ void main() {
       final id2 = await db.insert({'name': 'Also persistent'});
       await db.close();
 
-      // Dirty the clean flag so next open rebuilds indexes (stress test)
-      final raf = await File(path).open(mode: FileMode.write);
-      await raf.setPosition(24);
-      await raf.writeByte(0x00);
-      await raf.close();
+      // Dirty the clean flag so next open rebuilds indexes (stress test).
+      // Read-modify-write avoids FileMode.write which truncates the file on Windows.
+      final bytes = await File(path).readAsBytes();
+      bytes[24] = 0x00;
+      await File(path).writeAsBytes(bytes);
 
       final db2 = FastDB(WalStorageStrategy(
         main: IoStorageStrategy(path),

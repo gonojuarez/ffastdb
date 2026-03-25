@@ -1,7 +1,7 @@
 import 'fastdb.dart';
 import 'serialization/type_adapter.dart';
 import 'platform/open_database_native.dart'
-    if (dart.library.html) 'platform/open_database_web.dart';
+    if (dart.library.js_interop) 'platform/open_database_web.dart';
 
 /// Global FFastDB instance — the single entry-point to the database,
 /// analogous to Hive's top-level `Hive` object.

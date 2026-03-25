@@ -28,13 +28,22 @@ class IoStorageStrategy implements StorageStrategy {
     if (!await dbFile.exists()) {
       await dbFile.create(recursive: true);
     }
-    // CRITICAL FIX: Use FileMode.write instead of FileMode.append
-    // FileMode.append causes corruption on mobile (Android/iOS) because:
-    // - setPosition() is ignored for writes in append mode
-    // - all writes are forced to the end of the file
-    // - this corrupts the database since B-tree nodes are overwritten at specific offsets
-    _file = await dbFile.open(mode: FileMode.write);
-    _cachedSize = await _file!.length();
+    // Capture the logical file size BEFORE opening.
+    // On some platforms (Windows) FileMode.write truncates the file to zero on
+    // open, so we must read the length first via a stat() call, not via the
+    // RandomAccessFile handle.
+    final preOpenSize = await dbFile.length();
+    // On Android and iOS, FileMode.append causes corruption because setPosition()
+    // is ignored for writes — all writes are forced to EOF regardless of position.
+    // On Windows, FileMode.write truncates the file (CreateAlways), losing all data.
+    // Solution: use FileMode.append on non-mobile platforms (no truncation, random
+    // writes work via setPosition), and FileMode.write on mobile (no O_APPEND flag,
+    // random writes work, and O_CREAT without O_TRUNC doesn't truncate on POSIX).
+    final mode = (Platform.isAndroid || Platform.isIOS)
+        ? FileMode.write
+        : FileMode.append;
+    _file = await dbFile.open(mode: mode);
+    _cachedSize = preOpenSize;
 
     // Acquire an exclusive file lock (blocks other processes)
     await _acquireFileLock();
