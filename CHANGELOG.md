@@ -1,3 +1,8 @@
+## 0.0.15
+
+### Bug Fixes
+- **Web**: Fixed `Function converted via 'toJS' contains invalid types` compiler error in `IndexedDbStorageStrategy` by removing an invalid `async` keyword from a JS interop closure.
+
 ## 0.0.14
 
 ### Critical Bug Fixes

@@ -74,7 +74,7 @@ class IndexedDbStorageStrategy implements StorageStrategy {
       db.createObjectStore(_storeName.toJS);
     }).toJS;
 
-    request.onsuccess = ((JSObject event) async {
+    request.onsuccess = ((JSObject event) {
       _database = request.result;
       
       // Load initial data
