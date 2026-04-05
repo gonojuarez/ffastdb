@@ -1,5 +1,6 @@
 import '../index/secondary_index.dart';
 import '../index/sorted_index.dart';
+import '../index/hash_index.dart';
 
 /// Result of a query — a list of document IDs to fetch.
 class QueryResult {
@@ -522,6 +523,10 @@ class _StartsWithCondition implements _Condition {
       // Upper bound '$prefix\uffff' covers all strings with this prefix for
       // typical Unicode data (U+FFFF is larger than any common character).
       results = List<int>.from(index.range(prefix, '$prefix\uffff'));
+    } else if (index is HashIndex) {
+      // O(n) bucket scan without sorting or copying the full index.
+      results = index.filterKeys(
+          (key) => key is String && key.startsWith(prefix));
     } else {
       results = <int>[];
       for (final entry in index.sorted()) {

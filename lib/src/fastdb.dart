@@ -83,7 +83,7 @@ class FastDB {
   FastDB._internal(this.storage, {
     this.dataStorage,
     int cacheCapacity = 2048,
-    double autoCompactThreshold = 0,
+    double autoCompactThreshold = double.minPositive,
   }) {
     _autoCompactThreshold = autoCompactThreshold;
     _pageManager = PageManager(storage, cacheCapacity: cacheCapacity);
@@ -103,7 +103,7 @@ class FastDB {
   factory FastDB(StorageStrategy storage, {
     StorageStrategy? dataStorage,
     int cacheCapacity = 2048,
-    double autoCompactThreshold = 0,
+    double autoCompactThreshold = double.minPositive,
   }) {
     return FastDB._internal(
       storage,
@@ -119,7 +119,7 @@ class FastDB {
   factory FastDB.forTesting(StorageStrategy storage, {
     StorageStrategy? dataStorage,
     int cacheCapacity = 2048,
-    double autoCompactThreshold = 0,
+    double autoCompactThreshold = double.minPositive,
   }) {
     return FastDB._internal(
       storage,
@@ -163,9 +163,11 @@ class FastDB {
     StorageStrategy storage, {
     StorageStrategy? dataStorage,
     int cacheCapacity = 256,
-    double autoCompactThreshold = 0,
+    double autoCompactThreshold = double.minPositive,
     int version = 1,
     Map<int, dynamic Function(dynamic)>? migrations,
+    List<String> indexes = const [],
+    List<String> sortedIndexes = const [],
   }) async {
     final db = FastDB._internal(
       storage,
@@ -173,8 +175,12 @@ class FastDB {
       cacheCapacity: cacheCapacity,
       autoCompactThreshold: autoCompactThreshold,
     );
+    // Register indexes BEFORE open() so that _loadIndexes() can match blobs
+    // to their correct type, and the singleton is never exposed without indexes.
+    for (final field in indexes) db.addIndex(field);
+    for (final field in sortedIndexes) db.addSortedIndex(field);
     await db.open(version: version, migrations: migrations);
-    _instance = db;
+    _instance = db; // expose singleton only after open() completes
     return db;
   }
 
@@ -209,12 +215,15 @@ class FastDB {
 
   /// Creates an O(log n) sorted secondary index on [fieldName].
   void addSortedIndex(String fieldName) {
-    _secondaryIndexes[fieldName] = SortedIndex(fieldName);
+    // Use putIfAbsent so that a pre-loaded index (from _loadIndexes) is not
+    // overwritten with an empty one on subsequent startups.
+    _secondaryIndexes.putIfAbsent(fieldName, () => SortedIndex(fieldName));
   }
 
   /// Creates a bitmask index on [fieldName].
   void addBitmaskIndex(String fieldName, {int maxDocId = 1 << 16}) {
-    _secondaryIndexes[fieldName] = BitmaskIndex(fieldName, maxDocId: maxDocId);
+    _secondaryIndexes.putIfAbsent(
+        fieldName, () => BitmaskIndex(fieldName, maxDocId: maxDocId));
   }
 
   /// Rebuilds secondary indexes from live documents.
@@ -1086,6 +1095,13 @@ class FastDB {
           case 3: idx = BitmaskIndex.deserialize(indexBytes);
           default: continue;
         }
+        // If the user changed index type between startups (e.g. HashIndex →
+        // SortedIndex), the pre-registered type wins — discard the old blob so
+        // _rebuildSecondaryIndexes() will rebuild with the correct type.
+        final existing = _secondaryIndexes[idx.fieldName];
+        if (existing != null && existing.runtimeType != idx.runtimeType) {
+          continue;
+        }
         _secondaryIndexes[idx.fieldName] = idx;
       }
     } catch (_) {}
@@ -1312,8 +1328,13 @@ class FastDB {
     final allIds = await _primaryIndex.rangeSearch(1, 0x7FFFFFFF);
     for (int i = 0; i < allIds.length; i++) {
       final id = allIds[i];
-      final doc = await findById(id);
-      if (doc is Map<String, dynamic>) _indexDocument(id, doc);
+      try {
+        final doc = await findById(id);
+        if (doc is Map<String, dynamic>) _indexDocument(id, doc);
+      } catch (_) {
+        // Corrupt document — skip and continue indexing the rest.
+        // It will be removed on the next compact().
+      }
       if (i > 0 && i % 250 == 0) await Future.delayed(Duration.zero);
     }
   }

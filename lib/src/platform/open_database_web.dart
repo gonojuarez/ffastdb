@@ -19,7 +19,7 @@ Future<FastDB> openDatabase(
   String name, {
   String? directory,
   int cacheCapacity = 64,
-  double autoCompactThreshold = 0,
+  double autoCompactThreshold = double.minPositive,
   int version = 1,
   Map<int, dynamic Function(dynamic)>? migrations,
   List<String> indexes = const [],
@@ -55,14 +55,9 @@ Future<FastDB> openDatabase(
     autoCompactThreshold: autoCompactThreshold,
     version: version,
     migrations: migrations,
+    indexes: indexes,
+    sortedIndexes: sortedIndexes,
   );
-
-  for (final field in indexes) {
-    db.addIndex(field);
-  }
-  for (final field in sortedIndexes) {
-    db.addSortedIndex(field);
-  }
 
   return db;
 }

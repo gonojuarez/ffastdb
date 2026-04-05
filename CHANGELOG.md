@@ -1,3 +1,14 @@
+## 0.0.21
+
+### Bug Fixes (Index Corruption & Startup Reliability)
+
+- **CRITICAL — Bug #1**: Fixed `addSortedIndex` and `addBitmaskIndex` overwriting already-loaded indexes with empty instances. Both methods now use `putIfAbsent` so that a persisted index loaded from disk by `_loadIndexes()` is preserved. The direct assignment caused every startup after the first to return empty query results and permanently corrupt the on-disk index.
+- **GRAVE — Bug #2**: Fixed race condition in `openDatabase` where `FfastDb.instance` became accessible before secondary indexes were registered. Indexes are now passed into `FfastDb.init()` and registered before `open()` is called, so `_loadIndexes()` can match serialized blobs to the correct type and the singleton is never exposed in a half-initialized state.
+- **GRAVE — Bug #3**: Fixed `_loadIndexes()` silently ignoring an index-type change between startups (e.g. `HashIndex` → `SortedIndex`). If the on-disk type differs from the pre-registered type the blob is now discarded; the index is rebuilt with the correct type via `_rebuildSecondaryIndexes()`, preventing silent O(n log n) degradation of range queries.
+- **MODERATE — Bug #4**: Fixed a single corrupt document aborting the entire startup. `_rebuildSecondaryIndexes()` now wraps each `findById` call in a try/catch; corrupt documents are skipped and will be cleaned up on the next `compact()`.
+- **GRAVE — Bug #5a**: Fixed O(n) memory allocation on every `startsWith` query with `HashIndex`. `_StartsWithCondition` now calls the new `HashIndex.filterKeys()` method, which iterates buckets without sorting or copying the full index, reducing per-query allocation from O(n) to O(k) where k is the number of matching documents.
+- **GRAVE — Bug #5b**: Changed the default `autoCompactThreshold` from `0` (never compact) to `double.minPositive` (compact as soon as any dead document exists). This prevents the WAL file from growing unboundedly and eliminates the associated RAM spike on startup caused by replaying months of historical writes.
+
 ## 0.0.20
 
 ### Bug Fixes (Web Memory Crash)

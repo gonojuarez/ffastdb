@@ -210,6 +210,19 @@ class HashIndex implements SecondaryIndex {
     return entries;
   }
 
+  /// Returns all docIds whose key satisfies [predicate].
+  /// More efficient than sorted() for prefix/substring filters because it
+  /// does not allocate or sort a full copy of the index.
+  List<int> filterKeys(bool Function(dynamic key) predicate) {
+    final result = <int>[];
+    for (final bucket in _buckets) {
+      for (final entry in bucket) {
+        if (predicate(entry.value)) result.addAll(entry.docIds);
+      }
+    }
+    return result;
+  }
+
   @override
   List<int> all() {
     final result = <int>[];

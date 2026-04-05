@@ -241,8 +241,10 @@ void main() {
 
     setUp(() async {
       // Separate dataStorage so compact() triggers truncation on the doc file.
+      // Disable auto-compact (threshold=0) so we can test explicit compact().
       db = FastDB(MemoryStorageStrategy(),
-          dataStorage: MemoryStorageStrategy());
+          dataStorage: MemoryStorageStrategy(),
+          autoCompactThreshold: 0);
       await db.open();
     });
 
